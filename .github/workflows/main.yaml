@@ -1,0 +1,57 @@
+name: Deploy Helm Chart to AKS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AKS_RESOURCE_GROUP: your-resource-group
+  AKS_CLUSTER_NAME: your-aks-cluster-name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure CLI
+        uses: azure/CLI@v1
+
+      - name: Get AKS Credentials
+        run: |
+          az aks get-credentials --resource-group ${{ env.AKS_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Copy Helm chart between ACRs using Terraform
+        run: |
+          terraform init
+          terraform plan
+          terraform apply -auto-approve
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Helm deploy
+        run: |
+          helm upgrade --install ping ./ping-chart --set image.repository=instsance.azurecr.io/ping-chart --set image.tag=latest --namespace default --create-namespace
+
+      - name: Run Random Script on Helm Update
+        run: |
+          echo "Running random script..."
+          ./random_script.sh
